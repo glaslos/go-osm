@@ -51,10 +51,26 @@ type Way struct {
 	} `xml:"nd"`
 }
 
+type Member struct {
+	Type string `xml:"type,attr"`
+	Ref  int64  `xml:"ref,attr"`
+	Role string `xml:"role,attr"`
+}
+
+// Relation struct
+type Relation struct {
+	Elem
+	Visible bool     `xml:"visible,attr"`
+	Version string   `xml:"version,attr"`
+	Members []Member `xml:"member"`
+	Tags    []Tag    `xml:"tag"`
+}
+
 // Decode an OSM file
 func Decode(fileName string) {
 	nodes := []Node{}
 	ways := []Way{}
+	relations := []Relation{}
 	file, err := os.Open(fileName)
 	if err != nil {
 		log.Fatalln("Can't open OSM file: " + err.Error())
@@ -84,9 +100,18 @@ func Decode(fileName string) {
 				}
 				ways = append(ways, w)
 			}
+			if typedToken.Name.Local == "relation" {
+				var r Relation
+				err = decoder.DecodeElement(&r, &typedToken)
+				if err != nil {
+					log.Fatalln(err)
+				}
+				relations = append(relations, r)
+			}
 		}
 	}
 	fmt.Printf("Number of nodes decoded: %d\n", len(nodes))
 	fmt.Printf("Number of ways decoded: %d\n", len(ways))
+	fmt.Printf("Number of relations decoded: %d\n", len(relations))
 	fmt.Printf("%+v", nodes[1])
 }
