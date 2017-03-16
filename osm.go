@@ -2,11 +2,28 @@ package osm
 
 import (
 	"encoding/xml"
-	"fmt"
-	"log"
+	"io"
 	"os"
+	"strings"
 	"time"
 )
+
+// Osm struct
+type Map struct {
+	Bounds    Bounds
+	Nodes     []Node
+	Ways      []Way
+	Relations []Relation
+}
+
+// Bounds struct
+type Bounds struct {
+	XMLName xml.Name `xml:"bounds"`
+	Minlat  float64  `xml:"minlat,attr"`
+	Minlon  float64  `xml:"minlon,attr"`
+	Maxlat  float64  `xml:"maxlat,attr"`
+	Maxlon  float64  `xml:"maxlon,attr"`
+}
 
 // Location struct
 type Location struct {
@@ -14,6 +31,7 @@ type Location struct {
 	Coordinates []float64
 }
 
+// Tag struct
 type Tag struct {
 	XMLName xml.Name `xml:"tag"`
 	Key     string   `xml:"k,attr"`
@@ -51,6 +69,7 @@ type Way struct {
 	} `xml:"nd"`
 }
 
+// Member struct
 type Member struct {
 	Type string `xml:"type,attr"`
 	Ref  int64  `xml:"ref,attr"`
@@ -66,16 +85,30 @@ type Relation struct {
 	Tags    []Tag    `xml:"tag"`
 }
 
-// Decode an OSM file
-func Decode(fileName string) {
-	nodes := []Node{}
-	ways := []Way{}
-	relations := []Relation{}
+// DecodeFile an OSM file
+func DecodeFile(fileName string) (*Map, error) {
+
 	file, err := os.Open(fileName)
 	if err != nil {
-		log.Fatalln("Can't open OSM file: " + err.Error())
+		return nil, err
 	}
-	decoder := xml.NewDecoder(file)
+	defer file.Close()
+
+	return Decode(file)
+}
+
+func DecodeString(data string) (*Map, error) {
+	return Decode(strings.NewReader(data))
+}
+
+// Decode an reader
+func Decode(reader io.Reader) (*Map, error) {
+	var (
+		o   = new(Map)
+		err error
+	)
+
+	decoder := xml.NewDecoder(reader)
 	for {
 		token, _ := decoder.Token()
 		if token == nil {
@@ -84,34 +117,40 @@ func Decode(fileName string) {
 
 		switch typedToken := token.(type) {
 		case xml.StartElement:
-			if typedToken.Name.Local == "node" {
+			switch typedToken.Name.Local {
+			case "bounds":
+				var b Bounds
+				err = decoder.DecodeElement(&b, &typedToken)
+				if err != nil {
+					return nil, err
+				}
+				o.Bounds = b
+
+			case "node":
 				var n Node
 				err = decoder.DecodeElement(&n, &typedToken)
 				if err != nil {
-					log.Fatalln(err)
+					return nil, err
 				}
-				nodes = append(nodes, n)
-			}
-			if typedToken.Name.Local == "way" {
+				o.Nodes = append(o.Nodes, n)
+
+			case "way":
 				var w Way
 				err = decoder.DecodeElement(&w, &typedToken)
 				if err != nil {
-					log.Fatalln(err)
+					return nil, err
 				}
-				ways = append(ways, w)
-			}
-			if typedToken.Name.Local == "relation" {
+				o.Ways = append(o.Ways, w)
+
+			case "relation":
 				var r Relation
 				err = decoder.DecodeElement(&r, &typedToken)
 				if err != nil {
-					log.Fatalln(err)
+					return nil, err
 				}
-				relations = append(relations, r)
+				o.Relations = append(o.Relations, r)
 			}
 		}
 	}
-	fmt.Printf("Number of nodes decoded: %d\n", len(nodes))
-	fmt.Printf("Number of ways decoded: %d\n", len(ways))
-	fmt.Printf("Number of relations decoded: %d\n", len(relations))
-	fmt.Printf("%+v", nodes[1])
+	return o, nil
 }
